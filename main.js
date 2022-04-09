@@ -8,7 +8,11 @@ const camera = new THREE.PerspectiveCamera(75, 600 / 600, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer();
 controls = new OrbitControls(camera, renderer.domElement);
 renderer.setClearColor("#000000");
-const geometry = new THREE.PlaneGeometry(5, 5, 4, 4);
+
+const geomDim = 19;
+
+const geometry = new THREE.PlaneGeometry(5, 5, geomDim, geomDim); //geomDims
+
 const material = new THREE.MeshBasicMaterial({
   color: 0xffffff,
   side: THREE.DoubleSide,
@@ -16,7 +20,8 @@ const material = new THREE.MeshBasicMaterial({
 });
 const plane = new THREE.Mesh(geometry, material);
 const vertices = plane.geometry.attributes.position.array;
-
+const arrHelper = vertices.length / (geomDim + 1);
+console.log(vertices, vertices.length, geomDim, arrHelper, "HELPER<<<<");
 let previous;
 let current;
 
@@ -27,10 +32,12 @@ document.body.appendChild(renderer.domElement);
 //transforms to 2d array of z values
 const verticesTo2DArray = (vertices) => {
   const arr1 = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < geomDim + 1; i++) {
+    //50 geomDims+1
     const arr2 = [];
-    for (let j = 2; j < 15; j += 3) {
-      arr2.push(vertices[j + i * 15]);
+    for (let j = 2; j < arrHelper; j += 3) {
+      //j< vertices.length/geomDims+1
+      arr2.push(vertices[j + i * arrHelper]); //j< vertices.length/geomDims+1
     }
     arr1.push(arr2);
   }
@@ -41,8 +48,10 @@ let dampening = 0.95;
 
 //rippling effect
 const ripple = () => {
-  for (let i = 1; i < 5 - 1; i++) {
-    for (let j = 1; j < 5 - 1; j++) {
+  for (let i = 1; i < geomDim; i++) {
+    //geomDim
+    for (let j = 1; j < geomDim; j++) {
+      //geomDim
       current[i][j] =
         (previous[i - 1][j] +
           previous[i + 1][j] +
@@ -51,7 +60,7 @@ const ripple = () => {
           2 -
         current[i][j];
       current[i][j] *= dampening;
-      vertices[2 + j * 3 + i * 15] = current[i][j];
+      vertices[2 + j * 3 + i * arrHelper] = current[i][j]; ////j< vertices.length/geomDims+1
     }
   }
   //console.log("HERE: ", plane.geometry.attributes.position);
@@ -107,6 +116,7 @@ console.log(geometry.attributes);
 // }
 function keyDown(event) {
   if (event.key === "r") {
+    console.log("????");
     previous[2][2] = -5;
   }
 }
