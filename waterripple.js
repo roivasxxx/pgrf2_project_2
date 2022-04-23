@@ -7,12 +7,28 @@ let mouseMoved = false;
 const mouseCoords = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
 const WIDTH = 128;
-
+const geomDim = WIDTH - 1;
 // Water size in system units
 const BOUNDS = 512;
 const BOUNDS_HALF = BOUNDS * 0.5;
+let current, previous, vertices;
+let edgeVertices;
+let arrHelper;
+let dampening = 0.95;
+
+let mouseDisplacement = -25;
+
+let clicked = false;
+const arrowHelper = new THREE.ArrowHelper(
+  new THREE.Vector3(),
+  new THREE.Vector3(),
+  25,
+  0xffff00
+);
+
 init();
 animate();
+
 function init() {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -23,6 +39,8 @@ function init() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 
   scene = new THREE.Scene();
+
+  scene.add(arrowHelper);
 
   camera = new THREE.PerspectiveCamera(
     75,
@@ -43,20 +61,24 @@ function init() {
 
   container.appendChild(renderer.domElement);
   container.addEventListener("pointermove", onPointerMove);
-  container.addEventListener("click", () => console.log("Clicked"));
+  container.addEventListener("click", () => {
+    clicked = true;
+  });
   window.addEventListener("resize", onWindowResize);
 
   const gui = new GUI();
 
   const effectController = {
-    mouseSize: 20.0,
+    mouseDisplacement: 25,
     viscosity: 0.98,
   };
 
-  const valuesChanger = function () {};
+  const valuesChanger = function () {
+    mouseDisplacement = -effectController.mouseDisplacement;
+  };
 
   gui
-    .add(effectController, "mouseSize", 1.0, 100.0, 1.0)
+    .add(effectController, "mouseDisplacement", 25, 100, 5)
     .onChange(valuesChanger);
   gui
     .add(effectController, "viscosity", 0.9, 0.999, 0.001)
@@ -69,12 +91,7 @@ function init() {
 function initWater() {
   const materialColor = 0x0040c0;
 
-  const geometry = new THREE.PlaneGeometry(
-    BOUNDS,
-    BOUNDS,
-    WIDTH - 1,
-    WIDTH - 1
-  );
+  const geometry = new THREE.PlaneGeometry(BOUNDS, BOUNDS, geomDim, geomDim);
 
   // material: make a THREE.ShaderMaterial clone of THREE.MeshPhongMaterial, with customized vertex shader
   const material = new THREE.MeshPhongMaterial({
@@ -101,6 +118,12 @@ function initWater() {
   meshRay.matrixAutoUpdate = false;
   meshRay.updateMatrix();
   scene.add(meshRay);
+
+  vertices = waterMesh.geometry.attributes.position.array;
+  arrHelper = vertices.length / (geomDim + 1);
+  current = verticesTo2DArray(vertices);
+  previous = verticesTo2DArray(vertices);
+  edgeVertices = getEdgeVertices(previous);
 }
 
 function onWindowResize() {
@@ -131,18 +154,35 @@ function animate() {
 }
 
 function render() {
-  if (mouseMoved) {
+  ripple();
+  if (clicked) {
     raycaster.setFromCamera(mouseCoords, camera);
 
-    const intersects = raycaster.intersectObject(meshRay);
+    const intersects = raycaster.intersectObject(waterMesh);
 
     if (intersects.length > 0) {
-      const point = intersects[0].point;
+      console.log(intersects[0]);
+      arrowHelper.position.copy(intersects[0].point);
+      //previous[Math.floor(point.x)][Math.floor(point.z)] = -25;
+      const intersectedVertices = [
+        intersects[0].face.a,
+        intersects[0].face.b,
+        intersects[0].face.c,
+      ];
+      for (let i = 0; i < intersectedVertices.length; i++) {
+        const vert = intersectedVertices[i];
+        if (!edgeVertices.includes(vert)) {
+          const vertCoords = get2DVertex(vert);
+          previous[vertCoords.i][vertCoords.j] = mouseDisplacement;
+          break;
+        }
+      }
+
       //uniforms[ 'mousePos' ].value.set( point.x, point.z );
     } else {
       //uniforms[ 'mousePos' ].value.set( 10000, 10000 );
     }
-
+    clicked = false;
     mouseMoved = false;
   } else {
     //uniforms[ 'mousePos' ].value.set( 10000, 10000 );
@@ -156,4 +196,76 @@ function render() {
 
   // Render
   renderer.render(scene, camera);
+}
+
+function verticesTo2DArray(vertices) {
+  const arr1 = [];
+  for (let i = 0; i < geomDim + 1; i++) {
+    //50 geomDims+1
+    const arr2 = [];
+    for (let j = 2; j < arrHelper; j += 3) {
+      //j< vertices.length/geomDims+1
+
+      arr2.push(vertices[j + i * arrHelper]); //j< vertices.length/geomDims+1
+    }
+    arr1.push(arr2);
+  }
+  return arr1;
+}
+//rippling effect
+function ripple() {
+  for (let i = 1; i < geomDim; i++) {
+    //geomDim
+    for (let j = 1; j < geomDim; j++) {
+      //geomDim
+      current[i][j] =
+        (previous[i - 1][j] +
+          previous[i + 1][j] +
+          previous[i][j - 1] +
+          previous[i][j + 1]) /
+          2 -
+        current[i][j];
+      current[i][j] *= dampening;
+      vertices[2 + j * 3 + i * arrHelper] = current[i][j]; ////j< vertices.length/geomDims+1
+    }
+  }
+  //console.log("HERE: ", plane.geometry.attributes.position);
+  const temp = previous;
+  previous = current;
+  current = temp;
+  waterMesh.geometry.attributes.position.needsUpdate = true;
+  waterMesh.geometry.computeVertexNormals();
+}
+
+//TODO - PRVNI RADEK+SLOUPEC, POSLEDNI RADEK+ SLOUPEC
+function getEdgeVertices(vertices2D) {
+  const edgeVertices = [];
+  let k = 0;
+  //first row
+  for (let i = 0; i < vertices2D.length; i++) {
+    edgeVertices.push(k);
+    k++;
+  }
+  //first - last column
+  for (let i = 1; i < vertices2D.length - 1; i++) {
+    edgeVertices.push(k);
+    edgeVertices.push(k + vertices2D[i].length - 1);
+    k += vertices2D[i].length;
+  }
+  //last row
+  for (let i = 0; i < vertices2D.length; i++) {
+    edgeVertices.push(k);
+    k++;
+  }
+  return edgeVertices;
+}
+
+function get2DVertex(index) {
+  let k = 0;
+  for (let i = 0; i < previous.length; i++) {
+    for (let j = 0; j < previous[i].length; j++) {
+      if (k === index) return { i, j };
+      k++;
+    }
+  }
 }
