@@ -1,7 +1,7 @@
 # c01_pahulak_patrik_project2
 
-PGRF2 project #2
+PGRF2 projekt #2
 
 ##
 
-KÓD LZE SPUSTIT NA >> https://jsfiddle.net/pahulpa1/mgzp037L/1/
+KÓD LZE SPUSTIT NA >> https://lide.uhk.cz/fim/student/pahulpa1/PGRF2/index.html

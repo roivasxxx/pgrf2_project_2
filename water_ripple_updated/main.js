@@ -127,7 +127,6 @@ function setupWaterScene() {
  */
 function setupGui() {
   const gui = new GUI({ width: 300 });
-  console.log(pickedAlgo);
 
   const effectController = {
     dampening,
@@ -144,7 +143,6 @@ function setupGui() {
           fun: algoFunctions["Algoritmus dle Hugo Elias"],
         }
       : { id: change, fun: algoFunctions[change] };
-    console.log(change);
     resetGeometry();
   };
 
@@ -255,6 +253,7 @@ window.onload = () => {
   container.addEventListener("mousemove", onMouseMove, false);
   window.addEventListener("resize", onResize);
   window.addEventListener("keydown", onKeyDown);
+  container.addEventListener("keydown", onKeyDown);
 
   /*naplnění indexů vertexů, které jsou na kraji arraye
     nutno udělat, aby se krajní vertexy nezasekly, jelikož nejsou updatovány
@@ -377,6 +376,7 @@ function resetGeometry() {
   for (let i = 0; i < res * res; i++) {
     v[i].y = 0;
   }
+  initArrays();
 }
 
 /**
