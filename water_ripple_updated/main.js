@@ -3,10 +3,10 @@ import { GUI } from "https://cdn.jsdelivr.net/npm/three@0.121.1/examples/jsm/lib
 
 let renderer, scene, camera, controls;
 let SHADOW_MAP_RES = 1024;
-var WATER_SIZE = 10;
-var res = 80;
-var dampening = 0.92;
-var DISTURB_AMOUNT = 0.5;
+let WATER_SIZE = 10;
+let res = 80;
+let dampening = 0.92;
+let disturbAmount = -0.5;
 const materials = [];
 let waterMesh, groundPlaneMesh;
 let waterMeshEdgeIndices = [];
@@ -31,9 +31,10 @@ let pickedAlgo = {
   fun: algoFunctions["Algoritmus dle Hugo Elias"],
 };
 
+/**
+ * funkce pro vytvoření scény
+ */
 function setupThreejsScene() {
-  console.info("Scene setup");
-  //create renderer
   renderer = new THREE.WebGLRenderer({
     antialias: true,
   });
@@ -47,10 +48,9 @@ function setupThreejsScene() {
   container = document.createElement("div");
   document.body.appendChild(container);
   container.appendChild(renderer.domElement);
-  //create scene
+
   scene = new THREE.Scene();
 
-  //create camera
   camera = new THREE.PerspectiveCamera(
     25,
     renderer.domElement.width / renderer.domElement.height,
@@ -60,23 +60,19 @@ function setupThreejsScene() {
   camera.position.set(8, 8, 15);
   camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-  //create controls for camera
   controls = new OrbitControls(camera, renderer.domElement);
   controls.userPanSpeed = 0.2;
-  //controls.autoRotate = true;
   controls.modifierKey = "alt";
 
-  //setup lights111111
-  scene.add(new THREE.AmbientLight(0x111111));
-  //0xffff44
-  const keyLight = new THREE.SpotLight(0xffff6b, 0.6);
+  scene.add(new THREE.AmbientLight(0x111111, 0.2));
+
+  const keyLight = new THREE.SpotLight(0xffff44, 0.5);
   keyLight.position.set(5, 15, -15);
   keyLight.target.position.set(0, 0, 0);
   keyLight.castShadow = true;
   keyLight.shadow.camera.near = 10;
   keyLight.shadow.camera.far = 30;
   keyLight.shadow.camera.fov = 30;
-  //keyLight.shadowCameraVisible = true;
   keyLight.shadow.bias = 0.00001;
 
   keyLight.shadow.mapSize.width = SHADOW_MAP_RES;
@@ -88,10 +84,9 @@ function setupThreejsScene() {
   fillLight.target.position.set(0, 0, 0);
   scene.add(fillLight);
 
-  //create plane for intersection test
-  var groundPlaneGeom = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, 1, 1);
+  let groundPlaneGeom = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, 1, 1);
   groundPlaneGeom.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
-  var groundPlaneMaterial = new THREE.MeshPhongMaterial();
+  let groundPlaneMaterial = new THREE.MeshPhongMaterial();
   materials.push(groundPlaneMaterial);
   groundPlaneMesh = new THREE.Mesh(groundPlaneGeom, groundPlaneMaterial);
   groundPlaneMesh.castShadow = false;
@@ -100,9 +95,11 @@ function setupThreejsScene() {
   scene.add(groundPlaneMesh);
 }
 
+/**
+ * vytvoření waterMesh
+ */
 function setupWaterScene() {
-  //create a height-field water sim from the plane
-  var waterGeom = new THREE.PlaneGeometry(
+  let waterGeom = new THREE.PlaneGeometry(
     WATER_SIZE,
     WATER_SIZE,
     res - 1,
@@ -125,16 +122,18 @@ function setupWaterScene() {
   scene.add(waterMesh);
 }
 
+/**
+ * funkce pro nastavení lil-gui https://www.npmjs.com/package/lil-gui
+ */
 function setupGui() {
   const gui = new GUI({ width: 300 });
   console.log(pickedAlgo);
 
   const effectController = {
-    // mouseDisplacement: 25,
-    // viscosity: 0.98,
     dampening,
     algoritmus: guiPickableAlgos[0],
     wireframe: false,
+    "disturb amount": -disturbAmount,
   };
 
   const algoChanger = (change) => {
@@ -157,6 +156,10 @@ function setupGui() {
     waterMesh.material.wireframe = effectController.wireframe;
   };
 
+  const disturbAmountChanger = () => {
+    disturbAmount = -effectController["disturb amount"];
+  };
+
   gui
     .add(effectController, "algoritmus", guiPickableAlgos)
     .onChange(algoChanger);
@@ -164,44 +167,49 @@ function setupGui() {
     .add(effectController, "dampening", 0.6, 0.9999, 0.01)
     .onChange(dampeningChanger);
   gui.add(effectController, "wireframe").onChange(wireframeChanger);
+  gui
+    .add(effectController, "disturb amount", 0.1, 2, 0.1)
+    .onChange(disturbAmountChanger);
 
   dampeningChanger();
   algoChanger();
 }
-function window_onResize(event) {
-  //update camera projection
-  camera.aspect = window.innerWidth / (window.innerHeight - 5);
-  camera.updateProjectionMatrix();
 
-  //update renderer size
-  renderer.setSize(window.innerWidth, window.innerHeight - 5);
-}
-var isDisturbing = false;
-function window_onMouseDown(event) {
+/**
+ * funkce pohybu myši
+ * @param {Event} event - html mouseEvent
+ */
+function onMouseMove(event) {
   let intersectPoint = new THREE.Vector3();
   intersectPoint = detectIntersection(event);
   if (intersectPoint) {
-    isDisturbing = true;
     const vertexId = calcVertexId(intersectPoint.x, intersectPoint.z);
-    disturb(vertexId, DISTURB_AMOUNT);
+    disturb(vertexId, disturbAmount);
   }
 }
 
-function setMouseCoords(x, y) {
-  mouseCoords.set(
-    (x / renderer.domElement.clientWidth) * 2 - 1,
-    -(y / renderer.domElement.clientHeight) * 2 + 1
-  );
+/**
+ * resize okna
+ */
+function onResize() {
+  camera.aspect = window.innerWidth / (window.innerHeight - 5);
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight - 5);
 }
 
-function window_onMouseMove(event) {
-  if (!event.isPrimary) return;
-
-  setMouseCoords(event.clientX, event.clientY);
+/**
+ * stisknutí klávesy pro resetování vertexů waterMeshe
+ * @param {Event} event - html event
+ */
+function onKeyDown(event) {
+  if (event.code === "KeyR") resetGeometry();
 }
 
-var mousePosNorm = new THREE.Vector2();
-
+/**
+ *
+ * @param {Event} event - html event, v tomto případě mouseMove
+ * @returns bod intersekce pomocné meshe a myši
+ */
 function detectIntersection(event) {
   let projector = new THREE.Vector3();
   let raycaster = new THREE.Raycaster();
@@ -210,7 +218,7 @@ function detectIntersection(event) {
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1,
     0.5
-  ); // z = 0.5 important!
+  );
 
   projector.unproject(camera);
 
@@ -223,22 +231,34 @@ function detectIntersection(event) {
   }
 }
 
+/**
+ *
+ * @param {Number} x - X-ová souřadnice
+ * @param {Number} z -  Z-ová souřadnice
+ * @returns index vertexu ve waterMesh
+ */
 function calcVertexId(x, z) {
-  //calculate vertex id using x and z
-  var half = WATER_SIZE / 2.0;
-  var row = Math.floor(((z + half) / WATER_SIZE) * res);
-  var col = Math.floor(((x + half) / WATER_SIZE) * res);
+  let half = WATER_SIZE / 2.0;
+  let row = Math.floor(((z + half) / WATER_SIZE) * res);
+  let col = Math.floor(((x + half) / WATER_SIZE) * res);
   return row * res + col;
 }
 
+/**
+ * inicializace listenerů a scény
+ */
 window.onload = () => {
   setupThreejsScene();
   setupWaterScene();
   initArrays();
   setupGui();
-  container.addEventListener("mousemove", window_onMouseDown, false);
-  container.addEventListener("click", window_onMouseDown, false);
+  container.addEventListener("mousemove", onMouseMove, false);
+  window.addEventListener("resize", onResize);
+  window.addEventListener("keydown", onKeyDown);
 
+  /*naplnění indexů vertexů, které jsou na kraji arraye
+    nutno udělat, aby se krajní vertexy nezasekly, jelikož nejsou updatovány
+  */
   for (let i = 0; i < res; i++) {
     waterMeshEdgeIndices.push(i);
   }
@@ -261,6 +281,9 @@ function update() {
   waterMesh.geometry.normalsNeedUpdate = true;
 }
 
+/**
+ * funkce pro inicializaci arrayů
+ */
 function initArrays() {
   for (let i = 0; i < res * res; i++) {
     field1[i] = 0;
@@ -270,10 +293,13 @@ function initArrays() {
   }
 }
 
+/**
+ * funkce naimplementována dle https://web.archive.org/web/20160116150939/http://freespace.virgin.net/hugo.elias/graphics/x_water.htm
+ */
 function rippleHugo() {
   let idx;
-  var v = waterMesh.geometry.vertices;
-  var resMinusOne = res - 1;
+  let v = waterMesh.geometry.vertices;
+  let resMinusOne = res - 1;
 
   for (let i = 1; i < resMinusOne; i++) {
     for (let j = 1; j < resMinusOne; j++) {
@@ -289,7 +315,6 @@ function rippleHugo() {
     }
   }
 
-  //update vertex heights
   for (let i = 1; i < resMinusOne; i++) {
     for (let j = 1; j < resMinusOne; j++) {
       idx = i * res + j;
@@ -299,7 +324,6 @@ function rippleHugo() {
 
   update();
 
-  //swap buffers
   let temp;
   for (let i = 1; i < resMinusOne; i++) {
     for (let j = 1; j < resMinusOne; j++) {
@@ -311,10 +335,13 @@ function rippleHugo() {
   }
 }
 
+/**
+ * funkce naimplementována dle https://archive.org/stream/GDC2008Fischer/GDC2008-Fischer_djvu.txt
+ */
 function rippleMuller() {
   let idx;
-  var v = waterMesh.geometry.vertices;
-  var resMinusOne = res - 1;
+  let v = waterMesh.geometry.vertices;
+  let resMinusOne = res - 1;
 
   //propagate
   for (let i = 1; i < resMinusOne; i++) {
@@ -342,6 +369,9 @@ function rippleMuller() {
   update();
 }
 
+/**
+ * funkce pro reset Y-nových souřadnic waterMeshe
+ */
 function resetGeometry() {
   const v = waterMesh.geometry.vertices;
   for (let i = 0; i < res * res; i++) {
@@ -349,15 +379,23 @@ function resetGeometry() {
   }
 }
 
+/**
+ *
+ * @param {Number} idx - index vertexu
+ * @param {Number} amount - hodnota pro disturbování vertexu
+ */
 function disturb(idx, amount) {
   pickedAlgo.id === "Algoritmus dle Hugo Elias"
     ? !waterMeshEdgeIndices.includes(idx) && (field1[idx] = amount)
     : (velocityField[idx] = amount);
 }
 
+/**
+ * funkce, která využívá https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame
+ * pro přerenderování canvasu
+ */
 function animate() {
   pickedAlgo.fun();
   renderer.render(scene, camera);
-
   requestAnimationFrame(animate);
 }
